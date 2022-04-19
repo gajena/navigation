@@ -194,6 +194,18 @@ void GlobalPlanner::mapToWorld(double mx, double my, double& wx, double& wy) {
     wy = costmap_->getOriginY() + (my+convert_offset_) * costmap_->getResolution();
 }
 
+void GlobalPlanner::mapToWorld(double mx, double my, double& wx, double& wy, uint8_t& id){
+    mapToWorld(mx,my,wx,wy);
+    int index  =  costmap_->getIndex(mx,my);
+    int cost  = un_map_.find(index) != un_map_.end() ? un_map_.at(index) : 0;
+    if(cost != uint8_t(1) &&
+        cost != uint8_t(2) && cost != uint8_t(3)) {
+        un_map_[index] = id;
+    } else {
+        id = cost;
+    }
+}
+
 bool GlobalPlanner::worldToMap(double wx, double wy, double& mx, double& my) {
     double origin_x = costmap_->getOriginX(), origin_y = costmap_->getOriginY();
     double resolution = costmap_->getResolution();
@@ -212,12 +224,20 @@ bool GlobalPlanner::worldToMap(double wx, double wy, double& mx, double& my) {
 
 bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
                            std::vector<geometry_msgs::PoseStamped>& plan) {
-    return makePlan(start, goal, default_tolerance_, plan);
+    return makePlan(start, goal, default_tolerance_, plan, 0, 0);
 }
 
 bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
                            double tolerance, std::vector<geometry_msgs::PoseStamped>& plan) {
+    return makePlan(start, goal, tolerance, plan, 0, 0);
+}
+
+bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
+                           double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, bool clear) {
     boost::mutex::scoped_lock lock(mutex_);
+    if(clear) {
+        un_map_.clear();
+    }
     if (!initialized_) {
         ROS_ERROR(
                 "This planner has not been initialized yet, but it is being used, please call initialize() before use");
@@ -300,11 +320,13 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
 
     if (found_legal) {
         //extract the plan
-        if (getPlanFromPotential(start_x, start_y, goal_x, goal_y, goal, plan)) {
+        if (getPlanFromPotential(start_x, start_y, goal_x, goal_y, goal, plan, id)) {
             //make sure the goal we push on has the same timestamp as the rest of the plan
             geometry_msgs::PoseStamped goal_copy = goal;
             goal_copy.header.stamp = ros::Time::now();
-            plan.push_back(goal_copy);
+            if(id == 0) {
+                plan.push_back(goal_copy);
+            }
         } else {
             ROS_ERROR("Failed to get a plan from potential when a legal potential was found. This shouldn't happen.");
         }
@@ -343,9 +365,15 @@ void GlobalPlanner::publishPlan(const std::vector<geometry_msgs::PoseStamped>& p
     plan_pub_.publish(gui_path);
 }
 
+
 bool GlobalPlanner::getPlanFromPotential(double start_x, double start_y, double goal_x, double goal_y,
                                       const geometry_msgs::PoseStamped& goal,
                                        std::vector<geometry_msgs::PoseStamped>& plan) {
+    getPlanFromPotential(start_x,start_y, goal_x, goal_y, goal, plan, uint8_t(0));
+}
+bool GlobalPlanner::getPlanFromPotential(double start_x, double start_y, double goal_x, double goal_y,
+                                      const geometry_msgs::PoseStamped& goal,
+                                       std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id) {
     if (!initialized_) {
         ROS_ERROR(
                 "This planner has not been initialized yet, but it is being used, please call initialize() before use");
@@ -369,19 +397,23 @@ bool GlobalPlanner::getPlanFromPotential(double start_x, double start_y, double 
         std::pair<float, float> point = path[i];
         //convert the plan to world coordinates
         double world_x, world_y;
-        mapToWorld(point.first, point.second, world_x, world_y);
+        uint8_t id_new = id;
+        mapToWorld(point.first, point.second, world_x, world_y, id_new);
 
         geometry_msgs::PoseStamped pose;
         pose.header.stamp = plan_time;
         pose.header.frame_id = global_frame;
         pose.pose.position.x = world_x;
         pose.pose.position.y = world_y;
-        pose.pose.position.z = 0.0;
+        pose.pose.position.z = id_new;
         pose.pose.orientation.x = 0.0;
         pose.pose.orientation.y = 0.0;
         pose.pose.orientation.z = 0.0;
         pose.pose.orientation.w = 1.0;
         plan.push_back(pose);
+        if(id_new != id) {
+            return true;
+        }
     }
     if(old_navfn_behavior_){
             plan.push_back(goal);

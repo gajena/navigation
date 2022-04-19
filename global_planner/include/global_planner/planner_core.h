@@ -52,7 +52,7 @@
 #include <global_planner/traceback.h>
 #include <global_planner/orientation_filter.h>
 #include <global_planner/GlobalPlannerConfig.h>
-
+#include <unordered_map>
 namespace global_planner {
 
 class Expander;
@@ -108,6 +108,19 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
          * @param goal The goal pose
          * @param tolerance The tolerance on the goal point for the planner
          * @param plan The plan... filled by the planner
+         * @param id the vehicle id
+         * @param clear true clear the previous vehicle data
+         * @return True if a valid plan was found, false otherwise
+         */
+        bool makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, double tolerance,
+                      std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, bool clear);
+
+        /**
+         * @brief Given a goal pose in the world, compute a plan
+         * @param start The start pose
+         * @param goal The goal pose
+         * @param tolerance The tolerance on the goal point for the planner
+         * @param plan The plan... filled by the planner
          * @return True if a valid plan was found, false otherwise
          */
         bool makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, double tolerance,
@@ -133,6 +146,22 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
         bool getPlanFromPotential(double start_x, double start_y, double end_x, double end_y,
                                   const geometry_msgs::PoseStamped& goal,
                                   std::vector<geometry_msgs::PoseStamped>& plan);
+
+        /**
+         * @brief Compute a plan to a goal after the potential for a start point has already been
+         * computed (Note: You should call computePotential first)
+         * @param start_x
+         * @param start_y
+         * @param end_x
+         * @param end_y
+         * @param goal The goal pose to create a plan to
+         * @param plan The plan... filled by the planner
+         * @param id vehicle id
+         * @return True if a valid plan was found, false otherwise
+         */
+        bool getPlanFromPotential(double start_x, double start_y, double goal_x, double goal_y,
+                                      const geometry_msgs::PoseStamped& goal,
+                                       std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id);
 
         /**
          * @brief Get the potential, or naviagation cost, at a given point in the world (Note: You should call computePotential first)
@@ -175,6 +204,7 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
 
     private:
         void mapToWorld(double mx, double my, double& wx, double& wy);
+        void mapToWorld(double mx, double my, double& wx, double& wy, uint8_t& id);
         bool worldToMap(double wx, double wy, double& mx, double& my);
         void clearRobotCell(const geometry_msgs::PoseStamped& global_pose, unsigned int mx, unsigned int my);
         void publishPotential(float* potential);
@@ -199,6 +229,7 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
 
         bool old_navfn_behavior_;
         float convert_offset_;
+        std::unordered_map<int, int> un_map_;
 
         bool outline_map_;
 
