@@ -110,10 +110,11 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
          * @param plan The plan... filled by the planner
          * @param id the vehicle id
          * @param clear true clear the previous vehicle data
+         * @param num_cells num_cells to block
          * @return True if a valid plan was found, false otherwise
          */
         bool makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, double tolerance,
-                      std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, bool clear);
+                      std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, bool clear, uint num_cells);
 
         /**
          * @brief Given a goal pose in the world, compute a plan
@@ -157,11 +158,12 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
          * @param goal The goal pose to create a plan to
          * @param plan The plan... filled by the planner
          * @param id vehicle id
+         * @param num_cells cells to block
          * @return True if a valid plan was found, false otherwise
          */
         bool getPlanFromPotential(double start_x, double start_y, double goal_x, double goal_y,
                                       const geometry_msgs::PoseStamped& goal,
-                                       std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id);
+                                       std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, uint num_cells);
 
         /**
          * @brief Get the potential, or naviagation cost, at a given point in the world (Note: You should call computePotential first)
@@ -204,7 +206,7 @@ class GlobalPlanner : public nav_core::BaseGlobalPlanner {
 
     private:
         void mapToWorld(double mx, double my, double& wx, double& wy);
-        void mapToWorld(double mx, double my, double& wx, double& wy, uint8_t& id);
+        void mapToWorld(double mx, double my, double& wx, double& wy, uint8_t& id, uint num_cells);
         bool worldToMap(double wx, double wy, double& mx, double& my);
         void clearRobotCell(const geometry_msgs::PoseStamped& global_pose, unsigned int mx, unsigned int my);
         void publishPotential(float* potential);
