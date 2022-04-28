@@ -194,20 +194,33 @@ void GlobalPlanner::mapToWorld(double mx, double my, double& wx, double& wy) {
     wy = costmap_->getOriginY() + (my+convert_offset_) * costmap_->getResolution();
 }
 
-void GlobalPlanner::mapToWorld(double mx, double my, double& wx, double& wy, uint8_t& id, uint num_cells){
+void GlobalPlanner::mapToWorld(double mx, double my, double& wx, double& wy, uint8_t& id, double radius){
     mapToWorld(mx,my,wx,wy);
     int index  =  costmap_->getIndex(mx,my);
     int cost  = un_map_.find(index) != un_map_.end() ? un_map_.at(index) : 0;
-    if(cost != uint8_t(1) &&
-        cost != uint8_t(2) && cost != uint8_t(3)) {
-    for (int j = -int(num_cells); j < int(num_cells); j++) {
-            for (int i =-int(num_cells); i <int(num_cells) ; i++) {
-            un_map_[costmap_->getIndex(mx+i, my+j)] =id;
-            // costmap_->setCost(mx + i, my + j, 254);
-            }
-        }
+    if(cost == 0 || cost > 5) {
+        // for (int j = -int(num_cells); j < int(num_cells); j++) {
+        //     for (int i =-int(num_cells); i <int(num_cells) ; i++) {
+        //         un_map_[costmap_->getIndex(mx+i, my+j)] =id;
+        //     }
+        // }
     } else if(id != 0){
         id = cost;
+        std::vector<geometry_msgs::Point> poly;
+        poly.clear();
+        poly.emplace_back();
+        poly.back().x = wx - radius;
+        poly.back().y = wy - radius;
+        poly.emplace_back();
+        poly.back().x = wx + radius;
+        poly.back().y = wy - radius;
+        poly.emplace_back();
+        poly.back().x = wx + radius;
+        poly.back().y = wy + radius;
+        poly.emplace_back();
+        poly.back().x = wx - radius;
+        poly.back().y = wy + radius;
+        costmap_->setConvexPolygonCost(poly, 254);
     }
 }
 
@@ -234,16 +247,14 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
 
 bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
                            double tolerance, std::vector<geometry_msgs::PoseStamped>& plan) {
-    return makePlan(start, goal, tolerance, plan, 0, 1, 0);
+                               std::unordered_map<int, int> un_map;
+    return makePlan(start, goal, tolerance, plan, 0, 0, un_map);
 }
 
 bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
-                           double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, bool clear, uint num_cells) {
+                           double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, double radius,std::unordered_map<int, int>& un_map) {
     boost::mutex::scoped_lock lock(mutex_);
-    if(clear) {
-        un_map_.clear();
-        // costmap_->resetMap(0,0, costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
-    }
+    un_map_ = un_map;
     if (!initialized_) {
         ROS_ERROR(
                 "This planner has not been initialized yet, but it is being used, please call initialize() before use");
@@ -326,7 +337,7 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
 
     if (found_legal) {
         //extract the plan
-        if (getPlanFromPotential(start_x, start_y, goal_x, goal_y, goal, plan, id, num_cells)) {
+        if (getPlanFromPotential(start_x, start_y, goal_x, goal_y, goal, plan, id, radius)) {
             //make sure the goal we push on has the same timestamp as the rest of the plan
             geometry_msgs::PoseStamped goal_copy = goal;
             goal_copy.header.stamp = ros::Time::now();
@@ -344,7 +355,9 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
     orientation_filter_->processPath(start, plan);
 
     //publish the plan for visualization purposes
-    publishPlan(plan);
+    if (id == 0) {
+        publishPlan(plan);
+    }
     delete[] potential_array_;
     return !plan.empty();
 }
@@ -379,7 +392,7 @@ bool GlobalPlanner::getPlanFromPotential(double start_x, double start_y, double 
 }
 bool GlobalPlanner::getPlanFromPotential(double start_x, double start_y, double goal_x, double goal_y,
                                       const geometry_msgs::PoseStamped& goal,
-                                       std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, uint num_cells) {
+                                       std::vector<geometry_msgs::PoseStamped>& plan, uint8_t id, double radius) {
     if (!initialized_) {
         ROS_ERROR(
                 "This planner has not been initialized yet, but it is being used, please call initialize() before use");
@@ -404,7 +417,7 @@ bool GlobalPlanner::getPlanFromPotential(double start_x, double start_y, double 
         //convert the plan to world coordinates
         double world_x, world_y;
         uint8_t id_new = id;
-        mapToWorld(point.first, point.second, world_x, world_y, id_new, num_cells);
+        mapToWorld(point.first, point.second, world_x, world_y, id_new, radius);
 
         geometry_msgs::PoseStamped pose;
         pose.header.stamp = plan_time;
